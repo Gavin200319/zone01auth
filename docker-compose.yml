@@ -1,0 +1,10 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      FIREBASE_CREDENTIALS_FILE: /secrets/service-account.json
+    volumes:
+      - ./service-account.json:/secrets/service-account.json:ro
+    ports:
+      - "8080:8080"
