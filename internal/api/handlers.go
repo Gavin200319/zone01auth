@@ -78,6 +78,23 @@ func (h *Handler) Health(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "ok"})
 }
 
+func (h *Handler) HealthLive(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"status":    "alive",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func (h *Handler) HealthReady(c *fiber.Ctx) error {
+	if err := h.Store.Ping(ctxOf(c)); err != nil {
+		return newErr(http.StatusServiceUnavailable, "UNAVAILABLE", "database unreachable")
+	}
+	return c.JSON(fiber.Map{
+		"status":   "ready",
+		"database": "connected",
+	})
+}
+
 func (h *Handler) Config(c *fiber.Ctx) error {
 	list := make([]fiber.Map, 0, len(h.Att.Premises))
 	for _, p := range h.Att.Premises {
