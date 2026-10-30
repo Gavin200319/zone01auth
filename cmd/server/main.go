@@ -73,6 +73,10 @@ func main() {
 	}
 	app := api.New(h)
 
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+	st.StartCleanupWorker(workerCtx, 30*time.Minute)
+
 	go func() {
 		if err := app.Listen(":" + cfg.Port); err != nil {
 			log.Fatalf("listen: %v", err)
