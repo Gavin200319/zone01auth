@@ -72,6 +72,8 @@ func New(h *Handler) *fiber.App {
 	att.Post("/heartbeat", h.RequireAuth, h.Heartbeat)
 	att.Get("/history", h.RequireAuth, h.History)
 	att.Get("/months", h.RequireAuth, h.Months)
+	att.Get("/analytics", h.RequireAuth, h.AttendanceAnalytics)
+	att.Get("/export", h.RequireAuth, h.ExportAttendance)
 
 	return app
 }
