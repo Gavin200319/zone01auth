@@ -93,7 +93,12 @@ Errors are `{"error":{"code","message"}}`. Authenticated routes need `Authorizat
 | GET | `/attendance/months` | months with records |
 | GET | `/attendance/history?month=2026-10` | `summary{present_days,avg_hours,verified_percent}` + `days[]` |
 
-`/health` is outside `/api/v1`.
+Health endpoints (outside `/api/v1`):
+- `GET /health`: Overall Firebase database connectivity check.
+- `GET /health/live`: Process liveness probe.
+- `GET /health/ready`: Traffic readiness probe.
+
+OpenAPI Specification: See [docs/openapi.yaml](docs/openapi.yaml).
 
 ## Client flow
 

@@ -46,6 +46,8 @@ func New(h *Handler) *fiber.App {
 	app.Use(rateLimit(300))
 
 	app.Get("/health", h.Health)
+	app.Get("/health/live", h.HealthLive)
+	app.Get("/health/ready", h.HealthReady)
 
 	v1 := app.Group("/api/v1")
 	v1.Get("/config", h.Config)
