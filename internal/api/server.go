@@ -46,6 +46,8 @@ func New(h *Handler) *fiber.App {
 	app.Use(rateLimit(300))
 
 	app.Get("/health", h.Health)
+	app.Get("/health/live", h.HealthLive)
+	app.Get("/health/ready", h.HealthReady)
 
 	v1 := app.Group("/api/v1")
 	v1.Get("/config", h.Config)
@@ -70,6 +72,8 @@ func New(h *Handler) *fiber.App {
 	att.Post("/heartbeat", h.RequireAuth, h.Heartbeat)
 	att.Get("/history", h.RequireAuth, h.History)
 	att.Get("/months", h.RequireAuth, h.Months)
+	att.Get("/analytics", h.RequireAuth, h.AttendanceAnalytics)
+	att.Get("/export", h.RequireAuth, h.ExportAttendance)
 
 	return app
 }

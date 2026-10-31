@@ -1,8 +1,10 @@
 package attendance
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -349,4 +351,120 @@ func (s *Service) Months(ctx context.Context, userID string) ([]string, error) {
 		}
 	}
 	return append([]string{current}, months...), nil
+}
+
+type AnalyticsView struct {
+	Month           string       `json:"month"`
+	PresentDays     int          `json:"present_days"`
+	TotalHours      float64      `json:"total_hours"`
+	AvgHours        float64      `json:"avg_hours"`
+	VerifiedPercent int          `json:"verified_percent"`
+	StreakDays      int          `json:"streak_days"`
+	EarliestArrival *time.Time   `json:"earliest_arrival,omitempty"`
+	LatestDeparture *time.Time   `json:"latest_departure,omitempty"`
+	DailyHours      []DailyHours `json:"daily_hours"`
+}
+
+type DailyHours struct {
+	Date     string  `json:"date"`
+	Hours    float64 `json:"hours"`
+	Verified bool    `json:"verified"`
+}
+
+func (s *Service) Analytics(ctx context.Context, userID, month string) (*AnalyticsView, error) {
+	now := s.Now()
+	start := s.dayOf(now)
+	start = time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, time.UTC)
+	if month != "" {
+		t, err := time.Parse("2006-01", month)
+		if err != nil {
+			return nil, ErrInvalidMonth
+		}
+		start = t
+	}
+	days, err := s.Store.ListDays(ctx, userID, start, start.AddDate(0, 1, 0))
+	if err != nil {
+		return nil, err
+	}
+
+	view := &AnalyticsView{
+		Month:      start.Format("2006-01"),
+		DailyHours: make([]DailyHours, 0, len(days)),
+	}
+
+	var totalSec int64
+	verifiedCount := 0
+	streak := 0
+	maxStreak := 0
+
+	for _, d := range days {
+		key := d.Day.Format("2006-01-02")
+		dur := int64(d.LastSeen.Sub(d.FirstSeen).Seconds())
+		if dur < 0 {
+			dur = 0
+		}
+		totalSec += dur
+		hours := round1(float64(dur) / 3600.0)
+
+		if d.Verified {
+			verifiedCount++
+		}
+
+		view.DailyHours = append(view.DailyHours, DailyHours{
+			Date:     key,
+			Hours:    hours,
+			Verified: d.Verified,
+		})
+
+		arr := s.local(d.FirstSeen)
+		dep := s.local(d.LastSeen)
+		if view.EarliestArrival == nil || arr.Hour() < view.EarliestArrival.Hour() || (arr.Hour() == view.EarliestArrival.Hour() && arr.Minute() < view.EarliestArrival.Minute()) {
+			view.EarliestArrival = &arr
+		}
+		if view.LatestDeparture == nil || dep.Hour() > view.LatestDeparture.Hour() || (dep.Hour() == view.LatestDeparture.Hour() && dep.Minute() > view.LatestDeparture.Minute()) {
+			view.LatestDeparture = &dep
+		}
+
+		if d.Verified && dur >= 3600 {
+			streak++
+			if streak > maxStreak {
+				maxStreak = streak
+			}
+		} else {
+			streak = 0
+		}
+	}
+
+	n := len(days)
+	view.PresentDays = n
+	view.StreakDays = maxStreak
+	view.TotalHours = round1(float64(totalSec) / 3600.0)
+	if n > 0 {
+		view.AvgHours = round1(float64(totalSec) / float64(n) / 3600.0)
+		view.VerifiedPercent = int(math.Round(float64(verifiedCount) * 100 / float64(n)))
+	}
+
+	return view, nil
+}
+
+func (s *Service) ExportCSV(ctx context.Context, userID, month string) ([]byte, error) {
+	hist, err := s.History(ctx, userID, month)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("Date,FirstSeen,LastSeen,DurationHours,Verified,Status\n")
+	for _, d := range hist.Days {
+		hours := round1(float64(d.DurationSeconds) / 3600.0)
+		buf.WriteString(fmt.Sprintf("%s,%s,%s,%.1f,%t,%s\n",
+			d.Date,
+			d.FirstSeenAt.Format(time.RFC3339),
+			d.LastSeenAt.Format(time.RFC3339),
+			hours,
+			d.Verified,
+			d.Status,
+		))
+	}
+	return buf.Bytes(), nil
 }

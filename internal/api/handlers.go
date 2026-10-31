@@ -78,6 +78,23 @@ func (h *Handler) Health(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "ok"})
 }
 
+func (h *Handler) HealthLive(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"status":    "alive",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func (h *Handler) HealthReady(c *fiber.Ctx) error {
+	if err := h.Store.Ping(ctxOf(c)); err != nil {
+		return newErr(http.StatusServiceUnavailable, "UNAVAILABLE", "database unreachable")
+	}
+	return c.JSON(fiber.Map{
+		"status":   "ready",
+		"database": "connected",
+	})
+}
+
 func (h *Handler) Config(c *fiber.Ctx) error {
 	list := make([]fiber.Map, 0, len(h.Att.Premises))
 	for _, p := range h.Att.Premises {
@@ -495,4 +512,47 @@ func (h *Handler) Months(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(fiber.Map{"months": m})
+}
+
+func (h *Handler) AttendanceAnalytics(c *fiber.Ctx) error {
+	v, err := h.Att.Analytics(ctxOf(c), uid(c), c.Query("month"))
+	if errors.Is(err, attendance.ErrInvalidMonth) {
+		return badRequest(err.Error())
+	}
+	if err != nil {
+		return err
+	}
+	return c.JSON(v)
+}
+
+func (h *Handler) ExportAttendance(c *fiber.Ctx) error {
+	month := c.Query("month")
+	format := strings.ToLower(c.Query("format", "csv"))
+
+	if format == "json" {
+		v, err := h.Att.History(ctxOf(c), uid(c), month)
+		if errors.Is(err, attendance.ErrInvalidMonth) {
+			return badRequest(err.Error())
+		}
+		if err != nil {
+			return err
+		}
+		return c.JSON(v)
+	}
+
+	csvData, err := h.Att.ExportCSV(ctxOf(c), uid(c), month)
+	if errors.Is(err, attendance.ErrInvalidMonth) {
+		return badRequest(err.Error())
+	}
+	if err != nil {
+		return err
+	}
+
+	filename := "attendance_" + month + ".csv"
+	if month == "" {
+		filename = "attendance_current.csv"
+	}
+	c.Set("Content-Type", "text/csv; charset=utf-8")
+	c.Set("Content-Disposition", "attachment; filename=" + filename)
+	return c.Send(csvData)
 }

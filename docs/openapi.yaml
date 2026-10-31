@@ -1,0 +1,173 @@
+openapi: 3.0.3
+info:
+  title: Z01auth Backend API
+  description: >
+    Go (Fiber) + Firebase Realtime Database REST API for the Z01auth prototype:
+    Google sign-in with device binding, proximity-gated biometrics,
+    first-seen / last-seen attendance, history, settings, and health diagnostics.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: http://10.0.2.2:8080
+    description: Android emulator loopback
+
+paths:
+  /health:
+    get:
+      summary: Overall database ping health
+      responses:
+        '200':
+          description: Service and database healthy
+        '503':
+          description: Database unreachable
+  /health/live:
+    get:
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service process is alive
+  /health/ready:
+    get:
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Service is ready to serve traffic
+
+  /api/v1/config:
+    get:
+      summary: Get premises and geofence configuration
+      responses:
+        '200':
+          description: Premises metadata, coordinates, and BSSIDs
+
+  /api/v1/proximity/check:
+    post:
+      summary: Evaluate client location against campus geofence and Wi-Fi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location:
+                  type: object
+                  properties:
+                    lat: {type: number}
+                    lng: {type: number}
+                    accuracy_m: {type: number}
+                    bssid: {type: string}
+                    ssid: {type: string}
+                    is_mock: {type: boolean}
+      responses:
+        '200':
+          description: Zone status, distance, and biometrics unlocked state
+
+  /api/v1/auth/google:
+    post:
+      summary: Sign in with Google ID token and bind hardware device
+      responses:
+        '200':
+          description: JWT Access and Refresh tokens
+        '403':
+          description: Off-campus proximity required
+        '409':
+          description: Device already bound to another account
+
+  /api/v1/auth/biometric/challenge:
+    post:
+      summary: Request single-use biometric login challenge
+      responses:
+        '200':
+          description: Challenge ID and nonce
+
+  /api/v1/auth/biometric/login:
+    post:
+      summary: Authenticate with signed biometric challenge
+      responses:
+        '200':
+          description: User session and tokens
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Rotate refresh token and issue new access token
+      responses:
+        '200':
+          description: Rotated tokens
+
+  /api/v1/auth/logout:
+    post:
+      security:
+        - BearerAuth: []
+      summary: Revoke session and sign out
+      responses:
+        '204':
+          description: Session terminated
+
+  /api/v1/me:
+    get:
+      security:
+        - BearerAuth: []
+      summary: Current user profile and settings
+      responses:
+        '200':
+          description: User info
+
+  /api/v1/me/settings:
+    patch:
+      security:
+        - BearerAuth: []
+      summary: Update user appearance and polling preferences
+      responses:
+        '200':
+          description: Updated settings
+
+  /api/v1/attendance/today:
+    get:
+      security:
+        - BearerAuth: []
+      summary: Current day attendance status and recent detections
+      responses:
+        '200':
+          description: Day presence record
+
+  /api/v1/attendance/heartbeat:
+    post:
+      security:
+        - BearerAuth: []
+      summary: Dispatch attendance heartbeat or biometric check-in
+      responses:
+        '200':
+          description: Updated presence radar and day statistics
+
+  /api/v1/attendance/history:
+    get:
+      security:
+        - BearerAuth: []
+      summary: Monthly attendance log and summary
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+            example: "2026-10"
+      responses:
+        '200':
+          description: Summary and daily records
+
+  /api/v1/attendance/months:
+    get:
+      security:
+        - BearerAuth: []
+      summary: List all recorded attendance months
+      responses:
+        '200':
+          description: Array of YYYY-MM strings
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
